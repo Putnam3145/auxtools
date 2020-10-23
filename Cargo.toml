@@ -4,6 +4,7 @@ members = [
 	"dm",
 	"dm-impl",
 	"sigscan",
+	"atmospherics",
 ]
 
 [profile.release]
