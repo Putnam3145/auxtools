@@ -107,9 +107,8 @@ pub fn hook(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 	let cthook_prelude = match proc {
 		Some(p) => quote! {
-			// Inventory's submit method needs "inventory" to be a valid identifier for the module
-			use dm::inventory as inventory;
-			inventory::submit!(
+			dm::inventory::submit!(
+				#![crate = dm]
 				dm::CompileTimeHook::new(#p, #func_name)
 			);
 		},
