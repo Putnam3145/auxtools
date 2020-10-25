@@ -1,10 +1,11 @@
 [workspace]
 members = [
+	"atmospherics",
 	"auxtools",
 	"dm",
 	"dm-impl",
 	"sigscan",
-	"atmospherics",
+	"turf-grid",
 ]
 
 [profile.release]
