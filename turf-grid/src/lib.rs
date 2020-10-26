@@ -45,7 +45,7 @@ impl TurfGrid {
 		}
 	}
 	pub fn turf_ref(x: i32, y: i32, z: i32) -> Result<Value, Runtime> {
-		Ok(Value::turf(TurfGrid::to_id(x, y, z)))
+		Ok(Value::turf(TurfGrid::to_id(x, y, z)?))
 	}
 }
 
