@@ -11,9 +11,10 @@ impl TurfGrid {
 		static MAX_Z : RefCell<i32> = RefCell::new(1);
 	}
 	pub fn refresh_grid(ctx: &DMContext) -> Result<Value, Runtime> {
-		let new_x = ctx.get_world().get_number("maxx")? as i32;
-		let new_y = ctx.get_world().get_number("maxy")? as i32;
-		let new_z = ctx.get_world().get_number("maxz")? as i32;
+		let world = ctx.get_world();
+		let new_x = world.get_number("maxx")? as i32;
+		let new_y = world.get_number("maxy")? as i32;
+		let new_z = world.get_number("maxz")? as i32;
 		TurfGrid::MAX_X.with(|x| *x.borrow_mut() = new_x);
 		TurfGrid::MAX_Y.with(|y| *y.borrow_mut() = new_y);
 		TurfGrid::MAX_Z.with(|z| *z.borrow_mut() = new_z);
@@ -43,11 +44,14 @@ impl TurfGrid {
 			Err(runtime!("Attempted to get out-of-range tile."))
 		}
 	}
+	pub fn turf_ref(x: i32, y: i32, z: i32) -> Result<Value, Runtime> {
+		Ok(Value::turf(TurfGrid::to_id(x, y, z)))
+	}
 }
 
 #[hook("/world/proc/refresh_atmos_grid")]
 fn _refresh_atmos_grid_hook() {
-	TurfGrid::refresh_grid(ctx)?
+	TurfGrid::refresh_grid(ctx)
 }
 
 #[cfg(test)]
