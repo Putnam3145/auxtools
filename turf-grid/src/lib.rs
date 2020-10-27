@@ -44,18 +44,16 @@ impl TurfGrid {
 			Err(runtime!("Attempted to get out-of-range tile."))
 		}
 	}
+	pub fn turf_by_id(id: u32) -> Value {
+		return Value {
+			value: raw_types::values::Value {
+				tag: raw_types::values::ValueTag::Turf,
+				data: raw_types::values::ValueData { id: id },
+			},
+		};
+	}
 	pub fn turf_ref(x: i32, y: i32, z: i32) -> Result<Value, Runtime> {
-		Ok(Value::turf(TurfGrid::to_id(x, y, z)?)) // TODO: implement Value::turf
-		/*
-			pub fn turf(id: u32) -> Value {
-				return Value {
-					value: raw_types::values::Value {
-						tag: raw_types::values::ValueTag::Turf,
-						data: raw_types::values::ValueData { id: id},
-					},
-				};
-			}
-		*/
+		Ok(TurfGrid::turf_by_id(TurfGrid::to_id(x, y, z)?)) // TODO: implement Value::turf
 	}
 }
 
