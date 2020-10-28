@@ -5,7 +5,7 @@ members = [
 	"dm",
 	"dm-impl",
 	"sigscan",
-	"turf-grid",
+	"turf_grid"
 ]
 
 [profile.release]

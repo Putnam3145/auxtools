@@ -2,7 +2,7 @@ use dm::*;
 
 use std::cell::RefCell;
 
-struct TurfGrid {}
+pub struct TurfGrid {}
 
 impl TurfGrid {
 	thread_local! {
@@ -45,12 +45,9 @@ impl TurfGrid {
 		}
 	}
 	pub fn turf_by_id(id: u32) -> Value {
-		return Value {
-			value: raw_types::values::Value {
-				tag: raw_types::values::ValueTag::Turf,
-				data: raw_types::values::ValueData { id: id },
-			},
-		};
+		let tag = raw_types::values::ValueTag::Turf;
+		let data = raw_types::values::ValueData { id: id };
+		unsafe { Value::new(tag, data) }
 	}
 	pub fn turf_ref(x: i32, y: i32, z: i32) -> Result<Value, Runtime> {
 		Ok(TurfGrid::turf_by_id(TurfGrid::to_id(x, y, z)?)) // TODO: implement Value::turf

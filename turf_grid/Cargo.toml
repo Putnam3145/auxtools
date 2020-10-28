@@ -1,5 +1,5 @@
 [package]
-name = "turf-grid"
+name = "turf_grid"
 version = "0.1.0"
 authors = ["Putnam <putnam3145@gmail.com>"]
 edition = "2018"
