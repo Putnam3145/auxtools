@@ -10,7 +10,7 @@ impl TurfGrid {
 		static MAX_Y : RefCell<i32> = RefCell::new(255);
 		static MAX_Z : RefCell<i32> = RefCell::new(1);
 	}
-	pub fn refresh_grid(ctx: &DMContext) -> Result<Value, Runtime> {
+	pub fn refresh_grid(ctx: &DMContext) -> DMResult {
 		let world = ctx.get_world();
 		let new_x = world.get_number("maxx")? as i32;
 		let new_y = world.get_number("maxy")? as i32;
@@ -49,7 +49,7 @@ impl TurfGrid {
 		let data = raw_types::values::ValueData { id: id };
 		unsafe { Value::new(tag, data) }
 	}
-	pub fn turf_ref(x: i32, y: i32, z: i32) -> Result<Value, Runtime> {
+	pub fn turf_ref(x: i32, y: i32, z: i32) -> DMResult {
 		Ok(TurfGrid::turf_by_id(TurfGrid::to_id(x, y, z)?)) // TODO: implement Value::turf
 	}
 }
