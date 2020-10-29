@@ -2,16 +2,22 @@
 
 //! For when BYOND is not enough. Probably often.
 
+#[cfg(not(target_pointer_width = "32"))]
+compile_error!("Auxtools must be compiled for a 32-bit target");
+
 mod byond_ffi;
 mod callback;
 mod context;
 mod hooks;
+mod init;
 mod list;
 mod proc;
 pub mod raw_types;
 mod runtime;
 mod string;
 mod value;
+
+use init::{get_init_level, set_init_level, RequiredInitLevel};
 
 pub use callback::Callback;
 pub use context::DMContext;
@@ -26,6 +32,10 @@ pub use value::Value;
 
 /// Used by the [hook](attr.hook.html) macro to aggregate all compile-time hooks
 pub use inventory;
+
+// We need winapi to call GetModuleHandleExW which lets us prevent our DLL from unloading.
+#[cfg(windows)]
+extern crate winapi;
 
 macro_rules! signature {
 	($sig:tt) => {
@@ -128,66 +138,119 @@ macro_rules! with_scanner_by_call {
 	};
 }
 
+// This strange section of code retrieves our DLL using the init function's address.
+// This increments the DLL reference count, which prevents unloading.
+#[cfg(windows)]
+fn pin_dll() -> Result<(), ()> {
+	unsafe {
+		use winapi::um::libloaderapi::{
+			GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+			GET_MODULE_HANDLE_EX_FLAG_PIN,
+		};
+		let mut module = std::ptr::null_mut();
+
+		let res = GetModuleHandleExW(
+			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+			pin_dll as *const _,
+			&mut module,
+		);
+
+		if res == 0 {
+			return Err(());
+		}
+	}
+	Ok(())
+}
+#[cfg(unix)]
+fn pin_dll() -> Result<(), ()> {
+	Ok(())
+}
+
 byond_ffi_fn! { auxtools_init(_input) {
-	unsafe {
-		if raw_types::funcs::IS_INITIALIZED {
-			return Some("SUCCESS".to_owned())
+	if get_init_level() == RequiredInitLevel::None {
+		return Some("SUCCESS (Already initialized)".to_owned())
+	}
+
+	if get_init_level() == RequiredInitLevel::Full {
+		let byondcore = match sigscan::Scanner::for_module(BYONDCORE) {
+			Some(v) => v,
+			None => return Some("FAILED (Couldn't create scanner for byondcore.dll)".to_owned())
+		};
+
+		with_scanner! { byondcore,
+			get_string_id,
+			call_proc_by_id,
+			get_variable,
+			set_variable,
+			get_string_table_entry,
+			call_datum_proc_by_name,
+			get_assoc_element,
+			set_assoc_element,
+			append_to_list,
+			remove_from_list,
+			get_length,
+			create_list
 		}
-	}
 
-	let byondcore = match sigscan::Scanner::for_module(BYONDCORE) {
-		Some(v) => v,
-		None => return Some("FAILED (Couldn't create scanner for byondcore.dll)".to_owned())
-	};
-
-	with_scanner! { byondcore,
-		get_string_id,
-		call_proc_by_id,
-		get_variable,
-		set_variable,
-		get_string_table_entry,
-		call_datum_proc_by_name,
-		get_assoc_element,
-		set_assoc_element,
-		append_to_list,
-		remove_from_list,
-		get_length,
-		create_list
-	}
-
-	with_scanner_by_call! { byondcore,
-		get_proc_array_entry,
-		dec_ref_count,
-		inc_ref_count,
-		get_list_by_id
-	}
-
-	unsafe {
-		raw_types::funcs::IS_INITIALIZED = true;
-		raw_types::funcs::call_proc_by_id_byond = call_proc_by_id;
-		raw_types::funcs::call_datum_proc_by_name_byond = call_datum_proc_by_name;
-		raw_types::funcs::get_proc_array_entry_byond = get_proc_array_entry;
-		raw_types::funcs::get_string_id_byond = get_string_id;
-		raw_types::funcs::get_variable_byond = get_variable;
-		raw_types::funcs::set_variable_byond = set_variable;
-		raw_types::funcs::get_string_table_entry_byond = get_string_table_entry;
-		raw_types::funcs::inc_ref_count_byond = inc_ref_count;
-		raw_types::funcs::dec_ref_count_byond = dec_ref_count;
-		raw_types::funcs::get_list_by_id_byond = get_list_by_id;
-		raw_types::funcs::get_assoc_element_byond = get_assoc_element;
-		raw_types::funcs::set_assoc_element_byond = set_assoc_element;
-		raw_types::funcs::create_list_byond = create_list;
-		raw_types::funcs::append_to_list_byond = append_to_list;
-		raw_types::funcs::remove_from_list_byond = remove_from_list;
-		raw_types::funcs::get_length_byond = get_length;
-	}
-
-	for cthook in inventory::iter::<hooks::CompileTimeHook> {
-		if let Err(e) = hooks::hook(cthook.proc_path, cthook.hook) {
-			return Some(format!("FAILED (Could not hook proc {}: {:?})", cthook.proc_path, e));
+		with_scanner_by_call! { byondcore,
+			get_proc_array_entry,
+			dec_ref_count,
+			inc_ref_count,
+			get_list_by_id
 		}
+
+		unsafe {
+			raw_types::funcs::call_proc_by_id_byond = call_proc_by_id;
+			raw_types::funcs::call_datum_proc_by_name_byond = call_datum_proc_by_name;
+			raw_types::funcs::get_proc_array_entry_byond = get_proc_array_entry;
+			raw_types::funcs::get_string_id_byond = get_string_id;
+			raw_types::funcs::get_variable_byond = get_variable;
+			raw_types::funcs::set_variable_byond = set_variable;
+			raw_types::funcs::get_string_table_entry_byond = get_string_table_entry;
+			raw_types::funcs::inc_ref_count_byond = inc_ref_count;
+			raw_types::funcs::dec_ref_count_byond = dec_ref_count;
+			raw_types::funcs::get_list_by_id_byond = get_list_by_id;
+			raw_types::funcs::get_assoc_element_byond = get_assoc_element;
+			raw_types::funcs::set_assoc_element_byond = set_assoc_element;
+			raw_types::funcs::create_list_byond = create_list;
+			raw_types::funcs::append_to_list_byond = append_to_list;
+			raw_types::funcs::remove_from_list_byond = remove_from_list;
+			raw_types::funcs::get_length_byond = get_length;
+		}
+
+
+
+		if pin_dll().is_err() {
+			return Some("FAILED (Could not pin the library in memory.)".to_owned());
+		}
+
+		set_init_level(RequiredInitLevel::Partial);
 	}
 
+
+	if get_init_level() == RequiredInitLevel::Partial {
+		proc::populate_procs();
+		if let Err(_) = hooks::init() {
+			return Some("Failed (Couldn't initialize proc hooking)".to_owned());
+		}
+
+		for cthook in inventory::iter::<hooks::CompileTimeHook> {
+			if let Err(e) = hooks::hook(cthook.proc_path, cthook.hook) {
+				return Some(format!("FAILED (Could not hook proc {}: {:?})", cthook.proc_path, e));
+			}
+		}
+		set_init_level(RequiredInitLevel::None);
+	}
+
+
+	Some("SUCCESS".to_owned())
+} }
+
+byond_ffi_fn! { auxtools_shutdown(_input) {
+	hooks::clear_hooks();
+	proc::clear_procs();
+
+	set_init_level(RequiredInitLevel::Partial);
 	Some("SUCCESS".to_owned())
 } }
 
