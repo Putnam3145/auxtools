@@ -1,7 +1,7 @@
 #![deny(clippy::complexity, clippy::correctness, clippy::perf, clippy::style)]
 
-use dm::*;
-
+pub use atmospherics::*;
+/*
 #[hook("/proc/hooked")]
 fn hello_proc_hook() {
 	let obj = &args[0];
@@ -16,3 +16,4 @@ fn hello_proc_hook() {
 
 	Ok(Value::null())
 }
+*/
