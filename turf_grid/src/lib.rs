@@ -29,6 +29,9 @@ impl TurfGrid {
 	pub fn max_z() -> i32 {
 		TurfGrid::MAX_Y.with(|z| -> i32 { *z.borrow() })
 	}
+	pub fn max_id() -> i32 {
+		TurfGrid::max_x() * TurfGrid::max_y() * TurfGrid::max_z()
+	}
 	pub fn to_id(x: i32, y: i32, z: i32) -> Result<u32, Runtime> {
 		let cur_max_x = TurfGrid::max_x();
 		let cur_max_y = TurfGrid::max_y();
