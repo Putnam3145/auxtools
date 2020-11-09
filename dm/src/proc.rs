@@ -1,12 +1,16 @@
+use super::disassembler;
 use super::raw_types;
+use super::raw_types::misc;
+use super::raw_types::misc::AsMiscId;
 use super::raw_types::procs::{ProcEntry, ProcId};
 use super::runtime;
 use super::string::StringRef;
 use super::value::Value;
 
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::fmt;
 
 //
 // ### A note on Override IDs
@@ -43,6 +47,81 @@ impl<'a> Proc {
 	/// Finds the first proc with the given path
 	pub fn find<S: Into<String>>(path: S) -> Option<Self> {
 		get_proc(path)
+	}
+
+	/// Finds the n'th re-defined proc with the given path
+	pub fn find_override<S: Into<String>>(path: S, override_id: u32) -> Option<Self> {
+		get_proc_override(path, override_id)
+	}
+
+	pub fn from_id(id: ProcId) -> Option<Self> {
+		let mut proc_entry: *mut ProcEntry = std::ptr::null_mut();
+		unsafe {
+			assert_eq!(
+				raw_types::funcs::get_proc_array_entry(&mut proc_entry, id),
+				1
+			);
+		}
+		if proc_entry.is_null() {
+			return None;
+		}
+		let proc_name = strip_path(unsafe { StringRef::from_id((*proc_entry).path).into() });
+		Some(Proc {
+			id: id,
+			entry: proc_entry,
+			path: proc_name.clone(),
+		})
+	}
+
+	pub fn parameter_names(&self) -> Vec<StringRef> {
+		let mut misc: *mut misc::Misc = std::ptr::null_mut();
+		unsafe {
+			assert_eq!(
+				raw_types::funcs::get_misc_by_id(&mut misc, (*self.entry).parameters.as_misc_id()),
+				1
+			);
+
+			let count = (*misc).parameters.count();
+			let data = (*misc).parameters.data;
+			(0..count)
+				.map(|i| StringRef::from_variable_id((*data.add(i as usize)).name))
+				.collect()
+		}
+	}
+
+	pub fn local_names(&self) -> Vec<StringRef> {
+		let mut misc: *mut misc::Misc = std::ptr::null_mut();
+		unsafe {
+			assert_eq!(
+				raw_types::funcs::get_misc_by_id(&mut misc, (*self.entry).locals.as_misc_id()),
+				1
+			);
+
+			let count = (*misc).locals.count;
+			let names = (*misc).locals.names;
+			(0..count)
+				.map(|i| StringRef::from_variable_id(*names.add(i as usize)))
+				.collect()
+		}
+	}
+
+	pub unsafe fn bytecode(&self) -> (*mut u32, usize) {
+		let mut misc: *mut misc::Misc = std::ptr::null_mut();
+		assert_eq!(
+			raw_types::funcs::get_misc_by_id(&mut misc, (*self.entry).bytecode.as_misc_id()),
+			1
+		);
+
+		((*misc).bytecode.bytecode, (*misc).bytecode.count as usize)
+	}
+
+	pub fn disassemble(
+		&self,
+	) -> (
+		Vec<(u32, u32, disassembler::Instruction)>,
+		Option<disassembler::DisassembleError>,
+	) {
+		disassembler::disassemble(self)
 	}
 
 	/// Calls a global proc with the given arguments.
@@ -92,7 +171,14 @@ impl<'a> Proc {
 	}
 }
 
-thread_local!(static PROCS_BY_NAME: RefCell<HashMap<String, Vec<Proc>>> = RefCell::new(HashMap::new()));
+impl fmt::Debug for Proc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let path = unsafe { (*self.entry).path };
+		write!(f, "Proc({:?})", unsafe { StringRef::from_id(path) })
+	}
+}
+
+thread_local!(static PROCS_BY_NAME: RefCell<DashMap<String, Vec<Proc>>> = RefCell::new(DashMap::new()));
 
 fn strip_path(p: String) -> String {
 	p.replace("/proc/", "/").replace("/verb/", "/")
@@ -101,27 +187,16 @@ fn strip_path(p: String) -> String {
 pub fn populate_procs() {
 	let mut i: u32 = 0;
 	loop {
-		let mut proc_entry: *mut ProcEntry = std::ptr::null_mut();
-		unsafe {
-			assert_eq!(
-				raw_types::funcs::get_proc_array_entry(&mut proc_entry, ProcId(i)),
-				1
-			);
-		}
-		if proc_entry.is_null() {
+		let proc = Proc::from_id(ProcId(i));
+		if proc.is_none() {
 			break;
 		}
-		let proc_name = strip_path(unsafe { StringRef::from_id((*proc_entry).path.0).into() });
-		let proc = Proc {
-			id: ProcId(i),
-			entry: proc_entry,
-			path: proc_name.clone(),
-		};
+		let proc = proc.unwrap();
 
 		PROCS_BY_NAME.with(|h| {
-			match h.borrow_mut().entry(proc_name) {
-				Entry::Occupied(o) => {
-					o.into_mut().push(proc);
+			match h.borrow_mut().entry(proc.path.clone()) {
+				Entry::Occupied(mut o) => {
+					o.get_mut().push(proc);
 				}
 				Entry::Vacant(v) => {
 					v.insert(vec![proc]);
@@ -137,9 +212,9 @@ pub fn clear_procs() {
 	PROCS_BY_NAME.with(|h| h.borrow_mut().clear())
 }
 
-pub fn get_proc_override<S: Into<String>>(path: S, override_id: usize) -> Option<Proc> {
+pub fn get_proc_override<S: Into<String>>(path: S, override_id: u32) -> Option<Proc> {
 	let s = strip_path(path.into());
-	PROCS_BY_NAME.with(|h| match h.borrow().get(&s)?.get(override_id) {
+	PROCS_BY_NAME.with(|h| match h.borrow().get(&s)?.get(override_id as usize) {
 		Some(p) => Some(p.clone()),
 		None => None,
 	})

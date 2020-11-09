@@ -1,8 +1,8 @@
 use crate::hook;
 use crate::runtime;
 use crate::value::Value;
+use dashmap::DashMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate as dm;
@@ -16,7 +16,7 @@ lazy_static! {
 
 static mut NEXT_CALLBACK_ID: CallbackId = CallbackId { 0: 0 };
 thread_local! {
-	static CALLBACKS: RefCell<HashMap<CallbackId, Callback>> = RefCell::new(HashMap::new());
+	static CALLBACKS: RefCell<DashMap<CallbackId, Callback>> = RefCell::new(DashMap::new());
 }
 
 /// # Callbacks
@@ -113,7 +113,7 @@ fn process_callbacks() {
 	let mut ready_cbs = READY_CALLBACKS.lock().unwrap();
 	let mut dropped_cbs = DROPPED_CALLBACKS.lock().unwrap();
 	CALLBACKS.with(|h| {
-		let mut cbs = h.borrow_mut();
+		let cbs = h.borrow();
 
 		// We don't care if a callback runtimes.
 		#[allow(unused_must_use)]

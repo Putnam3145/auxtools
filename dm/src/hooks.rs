@@ -4,10 +4,10 @@ use super::value::Value;
 use super::DMContext;
 use crate::raw_types::values::IntoRawValue;
 use crate::runtime::DMResult;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use detour::RawDetour;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::ffi::c_void;
 
 #[doc(hidden)]
@@ -25,20 +25,9 @@ impl CompileTimeHook {
 inventory::collect!(CompileTimeHook);
 
 extern "C" {
-
 	static mut call_proc_by_id_original: *const c_void;
 
-	fn call_proc_by_id_original_trampoline(
-		usr: raw_types::values::Value,
-		proc_type: u32,
-		proc_id: raw_types::procs::ProcId,
-		unk_0: u32,
-		src: raw_types::values::Value,
-		args: *mut raw_types::values::Value,
-		args_count_l: usize,
-		unk_1: u32,
-		unk_2: u32,
-	) -> raw_types::values::Value;
+	static mut return_value: raw_types::values::Value;
 
 	fn call_proc_by_id_hook_trampoline(
 		usr: raw_types::values::Value,
@@ -73,15 +62,15 @@ impl std::fmt::Debug for HookFailure {
 
 pub fn init() -> Result<(), String> {
 	unsafe {
-		let hook = RawDetour::new(
+		let call_hook = RawDetour::new(
 			raw_types::funcs::call_proc_by_id_byond as *const (),
 			call_proc_by_id_hook_trampoline as *const (),
 		)
 		.unwrap();
 
-		hook.enable().unwrap();
-		call_proc_by_id_original = std::mem::transmute(hook.trampoline());
-		std::mem::forget(hook);
+		call_hook.enable().unwrap();
+		call_proc_by_id_original = std::mem::transmute(call_hook.trampoline());
+		std::mem::forget(call_hook);
 	}
 	Ok(())
 }
@@ -89,13 +78,14 @@ pub fn init() -> Result<(), String> {
 pub type ProcHook = fn(&DMContext, &Value, &Value, &mut Vec<Value>) -> DMResult;
 
 thread_local! {
-	static PROC_HOOKS: RefCell<HashMap<raw_types::procs::ProcId, ProcHook>> = RefCell::new(HashMap::new());
+	static PROC_HOOKS: RefCell<DashMap<raw_types::procs::ProcId, ProcHook>> = RefCell::new(DashMap::new());
 }
 
 fn hook_by_id(id: raw_types::procs::ProcId, hook: ProcHook) -> Result<(), HookFailure> {
 	PROC_HOOKS.with(|h| {
-		let mut map = h.borrow_mut();
-		match map.entry(id) {
+		let map = h.borrow();
+		let entry = map.entry(id);
+		match entry {
 			Entry::Vacant(v) => {
 				v.insert(hook);
 				Ok(())
@@ -106,7 +96,7 @@ fn hook_by_id(id: raw_types::procs::ProcId, hook: ProcHook) -> Result<(), HookFa
 }
 
 pub fn clear_hooks() {
-	PROC_HOOKS.with(|h| h.borrow_mut().clear());
+	PROC_HOOKS.with(|h| h.borrow().clear());
 }
 
 pub fn hook<S: Into<String>>(name: S, hook: ProcHook) -> Result<(), HookFailure> {
@@ -126,15 +116,15 @@ impl Proc {
 #[no_mangle]
 extern "C" fn call_proc_by_id_hook(
 	usr_raw: raw_types::values::Value,
-	proc_type: u32,
+	_proc_type: u32,
 	proc_id: raw_types::procs::ProcId,
-	unknown1: u32,
+	_unknown1: u32,
 	src_raw: raw_types::values::Value,
 	args_ptr: *mut raw_types::values::Value,
 	num_args: usize,
-	unknown2: u32,
-	unknown3: u32,
-) -> raw_types::values::Value {
+	_unknown2: u32,
+	_unknown3: u32,
+) -> u8 {
 	match PROC_HOOKS.with(|h| match h.borrow().get(&proc_id) {
 		Some(hook) => {
 			let ctx = unsafe { DMContext::new() };
@@ -164,7 +154,9 @@ extern "C" fn call_proc_by_id_hook(
 				}
 				Err(e) => {
 					// TODO: Some info about the hook would be useful (as the hook is never part of byond's stack, the runtime won't show it.)
-					src.call("stack_trace", &[&Value::from_string(e.message.as_str())])
+					Proc::find("/proc/stack_trace")
+						.unwrap()
+						.call(&[&Value::from_string(e.message.as_str())])
 						.unwrap();
 					unsafe { Some(Value::null().into_raw_value()) }
 				}
@@ -172,12 +164,12 @@ extern "C" fn call_proc_by_id_hook(
 		}
 		None => None,
 	}) {
-		Some(result) => result,
-		None => unsafe {
-			call_proc_by_id_original_trampoline(
-				usr_raw, proc_type, proc_id, unknown1, src_raw, args_ptr, num_args, unknown2,
-				unknown3,
-			)
-		},
+		Some(result) => {
+			unsafe {
+				return_value = result;
+			}
+			1
+		}
+		None => 0,
 	}
 }

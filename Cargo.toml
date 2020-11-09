@@ -2,6 +2,7 @@
 members = [
 	"atmospherics",
 	"auxtools",
+	"debug_server",
 	"dm",
 	"dm-impl",
 	"sigscan",

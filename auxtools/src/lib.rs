@@ -1,19 +1,35 @@
 #![deny(clippy::complexity, clippy::correctness, clippy::perf, clippy::style)]
 
-pub use atmospherics::*;
-/*
-#[hook("/proc/hooked")]
+use std::fs::File;
+use std::io::Write;
+
+use dm::*;
+
+#[hook("/proc/dump_bytecode")]
 fn hello_proc_hook() {
-	let obj = &args[0];
-	let vars = obj.get_list("vars")?;
+	let mut file = File::create("E:/bytecode.txt").unwrap();
 
-	let mut var_names = Vec::new();
+	let mut proc_id: u32 = 0;
+	loop {
+		let proc = Proc::from_id(raw_types::procs::ProcId(proc_id));
+		//let proc = Proc::find("/proc/test");
+		if proc.is_none() {
+			break;
+		}
+		let proc = proc.unwrap();
+		let (dism, err) = proc.disassemble();
+		writeln!(&mut file, "Dism for {:?}", proc).unwrap();
+		for x in &dism {
+			writeln!(&mut file, "\t{}-{}: {:?}", x.0, x.1, x.2).unwrap();
+		}
 
-	for i in 1..=vars.len() {
-		let name = vars.get(i)?;
-		var_names.push(name.as_string()?);
+		if let Some(err) = err {
+			writeln!(&mut file, "\n\tError: {:?}", err).unwrap();
+		}
+		writeln!(&mut file, "").unwrap();
+		proc_id += 1;
 	}
 
-	Ok(Value::null())
+	Ok(Value::from(1337))
 }
 */

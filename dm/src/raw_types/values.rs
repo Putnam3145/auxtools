@@ -1,4 +1,5 @@
 use super::funcs;
+use super::lists;
 use super::strings;
 use std::ffi::CStr;
 use std::fmt;
@@ -44,6 +45,10 @@ pub enum ValueTag {
 	WorldVars = 0x51,
 	GlobalVars = 0x52,
 
+	Datum = 0x21,
+	SaveFile = 0x23,
+
+
 	Number = 0x2A,
 	Appearance = 0x3A,
 }
@@ -52,12 +57,13 @@ impl fmt::Display for Value {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		unsafe {
 			match self.tag {
+				ValueTag::Null => write!(f, "{}", "null"),
 				ValueTag::Number => write!(f, "{}", self.data.number),
 				ValueTag::String => {
 					let id = self.data.string;
 					let mut entry: *mut strings::StringEntry = std::ptr::null_mut();
 					assert_eq!(funcs::get_string_table_entry(&mut entry, id), 1);
-					write!(f, "{}", CStr::from_ptr((*entry).data).to_string_lossy())
+					write!(f, "{:?}", CStr::from_ptr((*entry).data).to_string_lossy())
 				}
 				_ => write!(f, "Value({}, {})", self.tag as u8, self.data.id),
 			}
@@ -69,14 +75,15 @@ impl fmt::Debug for Value {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		unsafe {
 			match self.tag {
-				ValueTag::Number => write!(f, "Number({:?}", self.data.number),
+				ValueTag::Null => write!(f, "{}", "null"),
+				ValueTag::Number => write!(f, "{:?}", self.data.number),
 				ValueTag::String => {
 					let id = self.data.string;
 					let mut entry: *mut strings::StringEntry = std::ptr::null_mut();
 					assert_eq!(funcs::get_string_table_entry(&mut entry, id), 1);
 					write!(
 						f,
-						"String({:?})",
+						"{:?}",
 						CStr::from_ptr((*entry).data).to_string_lossy()
 					)
 				}
@@ -99,6 +106,7 @@ pub union ValueData {
 	pub string: strings::StringId,
 	pub number: f32,
 	pub id: u32,
+	pub list: lists::ListId,
 }
 
 /// Internal thing used when interfacing with BYOND. You shouldn't need to use this.

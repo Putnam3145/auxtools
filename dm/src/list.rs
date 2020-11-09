@@ -3,30 +3,7 @@ use crate::raw_types::values::{IntoRawValue, ValueTag};
 use crate::runtime;
 use crate::runtime::ConversionResult;
 use crate::value::Value;
-
-fn is_list(tag: ValueTag) -> bool {
-	match tag {
-		ValueTag::List
-		| ValueTag::MobVars
-		| ValueTag::ObjVars
-		| ValueTag::TurfVars
-		| ValueTag::AreaVars
-		| ValueTag::ClientVars
-		| ValueTag::Vars
-		| ValueTag::MobOverlays
-		| ValueTag::MobUnderlays
-		| ValueTag::ObjOverlays
-		| ValueTag::ObjUnderlays
-		| ValueTag::TurfOverlays
-		| ValueTag::TurfUnderlays
-		| ValueTag::AreaOverlays
-		| ValueTag::AreaUnderlays
-		| ValueTag::ImageVars
-		| ValueTag::WorldVars
-		| ValueTag::GlobalVars => true,
-		_ => false,
-	}
-}
+use std::iter::FromIterator;
 
 /// A wrapper around [Values](struct.Value.html) that make working with lists a little easier
 #[allow(unused)]
@@ -37,8 +14,7 @@ pub struct List {
 #[allow(unused)]
 impl List {
 	pub fn from_value(val: &Value) -> ConversionResult<Self> {
-		let tag = val.value.tag;
-		if !is_list(tag) {
+		if !Self::is_list(val) {
 			return Err(runtime!("attempted to create List from non-list value"));
 		}
 
@@ -141,6 +117,55 @@ impl List {
 			);
 		}
 		length
+	}
+
+	/// Copies the List's vector part (values accessible by numeric indices) into a Vec<Value>.
+	pub fn to_vec(self) -> Vec<Value> {
+		unsafe {
+			let mut ptr: *mut raw_types::lists::List = std::ptr::null_mut();
+			assert_eq!(
+				raw_types::funcs::get_list_by_id(&mut ptr, self.value.value.data.list),
+				1
+			);
+			std::slice::from_raw_parts((*ptr).vector_part as *const _, self.len() as usize).to_vec()
+		}
+	}
+
+	pub fn is_list(value: &Value) -> bool {
+		match value.value.tag {
+			ValueTag::List
+			| ValueTag::MobVars
+			| ValueTag::ObjVars
+			| ValueTag::TurfVars
+			| ValueTag::AreaVars
+			| ValueTag::ClientVars
+			| ValueTag::Vars
+			| ValueTag::MobOverlays
+			| ValueTag::MobUnderlays
+			| ValueTag::ObjOverlays
+			| ValueTag::ObjUnderlays
+			| ValueTag::TurfOverlays
+			| ValueTag::TurfUnderlays
+			| ValueTag::AreaOverlays
+			| ValueTag::AreaUnderlays
+			| ValueTag::ImageVars
+			| ValueTag::WorldVars
+			| ValueTag::GlobalVars => true,
+			_ => false,
+		}
+	}
+}
+
+impl FromIterator<Value> for List {
+	fn from_iter<I: IntoIterator<Item = Value>>(it: I) -> Self {
+		let res = Self::new();
+
+		// TODO: This is probably a performane bottleneck.
+		for val in it {
+			res.append(&val);
+		}
+
+		res
 	}
 }
 

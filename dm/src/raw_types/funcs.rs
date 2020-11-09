@@ -1,10 +1,17 @@
 use super::lists;
+use super::misc;
 use super::procs;
 use super::strings;
 use super::values;
 
 use std::ffi::c_void;
 use std::os::raw::c_char;
+
+// TODO: Doesn't belong here at all
+pub static mut CURRENT_EXECUTION_CONTEXT: *mut *mut procs::ExecutionContext = std::ptr::null_mut();
+pub static mut SUSPENDED_PROCS: *mut procs::SuspendedProcs = std::ptr::null_mut();
+// pub static mut SUSPENDED_PROCS: *mut procs::SuspendedProcs = std::ptr::null_mut();
+pub static mut VARIABLE_NAMES: *const strings::StringId = std::ptr::null();
 
 // Function pointers exported by C++ but set by Rust
 // Rust shouldn't call these so we're going to treat them as void ptrs for simplicity
@@ -25,6 +32,8 @@ extern "C" {
 	pub static mut append_to_list_byond: *const c_void;
 	pub static mut remove_from_list_byond: *const c_void;
 	pub static mut get_length_byond: *const c_void;
+	pub static mut get_misc_by_id_byond: *const c_void;
+	pub static mut to_string_byond: *const c_void;
 }
 
 // Functions exported by our C++ for Rust to call.
@@ -88,4 +97,6 @@ extern "C" {
 	pub fn append_to_list(list: values::Value, value: values::Value) -> u8;
 	pub fn remove_from_list(list: values::Value, value: values::Value) -> u8;
 	pub fn get_length(out: *mut u32, value: values::Value) -> u8;
+	pub fn get_misc_by_id(out: *mut *mut misc::Misc, index: misc::MiscId) -> u8;
+	pub fn to_string(out: *mut strings::StringId, value: values::Value) -> u8;
 }

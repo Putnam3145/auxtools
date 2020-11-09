@@ -4,6 +4,16 @@ use std::os::raw::c_char;
 #[derive(Copy, Clone, Debug)]
 pub struct StringId(pub u32);
 
+impl StringId {
+	pub fn valid(&self) -> bool {
+		self.0 != 0xFFFF
+	}
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct VariableId(pub u32);
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct StringEntry {
