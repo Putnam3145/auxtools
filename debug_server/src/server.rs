@@ -8,9 +8,9 @@ use std::{
 	thread::JoinHandle,
 };
 
-use dm::*;
-use dm::raw_types::values::{ValueTag, ValueData};
 use super::server_types::*;
+use dm::raw_types::values::{ValueData, ValueTag};
+use dm::*;
 
 //
 // Server = main-thread code
@@ -131,15 +131,13 @@ impl Server {
 			let list = List::from_value(value)?;
 			let len = list.len();
 
-			let mut variables = vec![
-				Variable {
-					name: "len".to_owned(),
-					kind: "TODO".to_owned(),
-					value: format!("{}", len),
-					variables: None,
-				}
-			];
-			
+			let mut variables = vec![Variable {
+				name: "len".to_owned(),
+				kind: "TODO".to_owned(),
+				value: format!("{}", len),
+				variables: None,
+			}];
+
 			for i in 1..=len {
 				let value = list.get(i)?;
 				variables.push(Self::value_to_variable(format!("[{}]", i), &value)?);
@@ -156,10 +154,7 @@ impl Server {
 		// TODO: vars is not always a list
 		let vars = List::from_value(&unsafe {
 			if value.value.tag == ValueTag::World && value.value.data.id == 1 {
-				Value::new(
-					ValueTag::GlobalVars,
-					ValueData { id: 0 },
-				)
+				Value::new(ValueTag::GlobalVars, ValueData { id: 0 })
 			} else {
 				value.get("vars")?
 			}
@@ -204,7 +199,7 @@ impl Server {
 				for (name, local) in &frame.args {
 					let name = match name {
 						Some(name) => String::from(name),
-						None => "<unknown>".to_owned()
+						None => "<unknown>".to_owned(),
 					};
 					vars.push(Self::value_to_variable(name, &local).unwrap());
 				}
@@ -213,7 +208,10 @@ impl Server {
 			}
 
 			None => {
-				eprintln!("Debug server tried to read arguments from invalid frame id: {}", frame_index);
+				eprintln!(
+					"Debug server tried to read arguments from invalid frame id: {}",
+					frame_index
+				);
 				vec![]
 			}
 		}
@@ -236,7 +234,10 @@ impl Server {
 			}
 
 			None => {
-				eprintln!("Debug server tried to read locals from invalid frame id: {}", frame_index);
+				eprintln!(
+					"Debug server tried to read locals from invalid frame id: {}",
+					frame_index
+				);
 				vec![]
 			}
 		}
@@ -385,15 +386,11 @@ impl Server {
 						let mut arguments = None;
 
 						if !frame.args.is_empty() {
-							arguments = Some(VariablesRef::Arguments {
-								frame: frame_id,
-							});
+							arguments = Some(VariablesRef::Arguments { frame: frame_id });
 						}
 
 						// Never empty because we're putting ./src/usr in here
-						let locals = Some(VariablesRef::Locals {
-							frame: frame_id,
-						});
+						let locals = Some(VariablesRef::Locals { frame: frame_id });
 
 						let globals_value = Value::globals();
 						let globals = unsafe {
@@ -435,17 +432,13 @@ impl Server {
 
 			Request::Variables { vars } => {
 				let response = match vars {
-					VariablesRef::Arguments { frame } => {
-						Response::Variables {
-							vars: self.get_args(frame)
-						}
-					}
+					VariablesRef::Arguments { frame } => Response::Variables {
+						vars: self.get_args(frame),
+					},
 
-					VariablesRef::Locals { frame } => {
-						Response::Variables {
-							vars: self.get_locals(frame)
-						}
-					}
+					VariablesRef::Locals { frame } => Response::Variables {
+						vars: self.get_locals(frame),
+					},
 
 					VariablesRef::Internal { tag, data } => {
 						let value = unsafe {

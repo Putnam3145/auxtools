@@ -194,11 +194,9 @@ impl Value {
 
 	pub fn to_string(&self) -> ConversionResult<String> {
 		match self.value.tag {
-			raw_types::values::ValueTag::Null |
-			raw_types::values::ValueTag::Number |
-			raw_types::values::ValueTag::String => {
-				return Ok(format!("{}", self.value))
-			}
+			raw_types::values::ValueTag::Null
+			| raw_types::values::ValueTag::Number
+			| raw_types::values::ValueTag::String => return Ok(format!("{}", self.value)),
 
 			_ => {}
 		}

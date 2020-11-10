@@ -1,10 +1,9 @@
 #![deny(clippy::complexity, clippy::correctness, clippy::perf, clippy::style)]
-
+/*
 use std::fs::File;
 use std::io::Write;
 
 use dm::*;
-
 #[hook("/proc/dump_bytecode")]
 fn hello_proc_hook() {
 	let mut file = File::create("E:/bytecode.txt").unwrap();
