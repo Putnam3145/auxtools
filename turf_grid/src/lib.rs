@@ -1,33 +1,31 @@
 use dm::*;
 
-use std::cell::RefCell;
+use std::sync::atomic::{AtomicI32,Ordering};
 
 pub struct TurfGrid {}
+static MAX_X : AtomicI32 = AtomicI32::new(255);
+static MAX_Y : AtomicI32 = AtomicI32::new(255);
+static MAX_Z : AtomicI32 = AtomicI32::new(1);
 
 impl TurfGrid {
-	thread_local! {
-		static MAX_X : RefCell<i32> = RefCell::new(255);
-		static MAX_Y : RefCell<i32> = RefCell::new(255);
-		static MAX_Z : RefCell<i32> = RefCell::new(1);
-	}
 	pub fn refresh_grid(ctx: &DMContext) -> DMResult {
 		let world = ctx.get_world();
 		let new_x = world.get_number("maxx")? as i32;
 		let new_y = world.get_number("maxy")? as i32;
 		let new_z = world.get_number("maxz")? as i32;
-		TurfGrid::MAX_X.with(|x| *x.borrow_mut() = new_x);
-		TurfGrid::MAX_Y.with(|y| *y.borrow_mut() = new_y);
-		TurfGrid::MAX_Z.with(|z| *z.borrow_mut() = new_z);
+		MAX_X.store(new_x,Ordering::Relaxed);
+		MAX_Y.store(new_y,Ordering::Relaxed);
+		MAX_Z.store(new_z,Ordering::Relaxed);
 		Ok(Value::from(true))
 	}
 	pub fn max_x() -> i32 {
-		TurfGrid::MAX_X.with(|x| -> i32 { *x.borrow() })
+		MAX_X.load(Ordering::Relaxed)
 	}
 	pub fn max_y() -> i32 {
-		TurfGrid::MAX_Y.with(|y| -> i32 { *y.borrow() })
+		MAX_Y.load(Ordering::Relaxed)
 	}
 	pub fn max_z() -> i32 {
-		TurfGrid::MAX_Y.with(|z| -> i32 { *z.borrow() })
+		MAX_Z.load(Ordering::Relaxed)
 	}
 	pub fn max_id() -> i32 {
 		TurfGrid::max_x() * TurfGrid::max_y() * TurfGrid::max_z()
