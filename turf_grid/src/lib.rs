@@ -1,11 +1,11 @@
 use dm::*;
 
-use std::sync::atomic::{AtomicI32,Ordering};
+use std::sync::atomic::{AtomicI32, Ordering};
 
 pub struct TurfGrid {}
-static MAX_X : AtomicI32 = AtomicI32::new(255);
-static MAX_Y : AtomicI32 = AtomicI32::new(255);
-static MAX_Z : AtomicI32 = AtomicI32::new(1);
+static MAX_X: AtomicI32 = AtomicI32::new(255);
+static MAX_Y: AtomicI32 = AtomicI32::new(255);
+static MAX_Z: AtomicI32 = AtomicI32::new(1);
 
 impl TurfGrid {
 	pub fn refresh_grid(ctx: &DMContext) -> DMResult {
@@ -13,9 +13,9 @@ impl TurfGrid {
 		let new_x = world.get_number("maxx")? as i32;
 		let new_y = world.get_number("maxy")? as i32;
 		let new_z = world.get_number("maxz")? as i32;
-		MAX_X.store(new_x,Ordering::Relaxed);
-		MAX_Y.store(new_y,Ordering::Relaxed);
-		MAX_Z.store(new_z,Ordering::Relaxed);
+		MAX_X.store(new_x, Ordering::Relaxed);
+		MAX_Y.store(new_y, Ordering::Relaxed);
+		MAX_Z.store(new_z, Ordering::Relaxed);
 		Ok(Value::from(true))
 	}
 	pub fn max_x() -> i32 {
