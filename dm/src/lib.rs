@@ -22,7 +22,7 @@ use sigscan::{signature, signatures};
 
 use init::{get_init_level, set_init_level, InitLevel};
 
-pub use callback::Callback;
+pub use callback::{Callback, CallbackHandle};
 pub use context::DMContext;
 pub use disassembler::{
 	opcodes::{OpCode, DEBUG_BREAK_OPCODE, DEBUG_BREAK_OPERAND},
