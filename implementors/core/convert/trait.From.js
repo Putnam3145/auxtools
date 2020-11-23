@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["dm"] = [{"text":"impl From&lt;List&gt; for Value","synthetic":false,"types":[]},{"text":"impl&lt;'_&gt; From&lt;&amp;'_ str&gt; for StringRef","synthetic":false,"types":[]},{"text":"impl From&lt;f32&gt; for Value","synthetic":false,"types":[]},{"text":"impl From&lt;i32&gt; for Value","synthetic":false,"types":[]},{"text":"impl From&lt;u32&gt; for Value","synthetic":false,"types":[]},{"text":"impl From&lt;bool&gt; for Value","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

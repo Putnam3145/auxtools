@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["dm"] = [{"text":"impl Clone for Proc","synthetic":false,"types":[]},{"text":"impl Clone for ListId","synthetic":false,"types":[]},{"text":"impl Clone for ProcId","synthetic":false,"types":[]},{"text":"impl Clone for StringId","synthetic":false,"types":[]},{"text":"impl Clone for ValueTag","synthetic":false,"types":[]},{"text":"impl Clone for ValueData","synthetic":false,"types":[]},{"text":"impl Clone for Value","synthetic":false,"types":[]},{"text":"impl Clone for StringRef","synthetic":false,"types":[]},{"text":"impl Clone for Value","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
