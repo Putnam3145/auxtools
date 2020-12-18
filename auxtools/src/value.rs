@@ -7,6 +7,8 @@ use crate::runtime::{ConversionResult, DMResult};
 use std::ffi::CString;
 use std::fmt;
 use std::marker::PhantomData;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 /// `Value` represents any value a DM variable can hold, such as numbers, strings, datums, etc.
 ///
@@ -278,7 +280,9 @@ impl Value {
 			Ok(my_type) => my_type == typepath.as_ref(),
 		}
 	}
-
+	thread_local! {
+		static STRINGS_BY_ID: RefCell<HashMap<&'static str,raw_types::strings::StringId>> = RefCell::new(HashMap::new());
+	}
 	/// Creates a Value that references a byond string.
 	/// Will panic if the given string contains null bytes
 	///
@@ -289,17 +293,27 @@ impl Value {
 	pub fn from_string<S: AsRef<str>>(data: S) -> Value {
 		// TODO: This should be done differently
 		let string = CString::new(data.as_ref()).unwrap();
+		Self::STRINGS_BY_ID.with(|strings| {
+			if let Some(&id) = strings.borrow().get(data.as_ref()) {
+				unsafe {
+					Value::new(
+						raw_types::values::ValueTag::String,
+						raw_types::values::ValueData { string: id },
+					)
+				}
+			} else {
+				unsafe {
+					let mut id = raw_types::strings::StringId(0);
 
-		unsafe {
-			let mut id = raw_types::strings::StringId(0);
-
-			assert_eq!(raw_types::funcs::get_string_id(&mut id, string.as_ptr()), 1);
-
-			Value::new(
-				raw_types::values::ValueTag::String,
-				raw_types::values::ValueData { string: id },
-			)
-		}
+					assert_eq!(raw_types::funcs::get_string_id(&mut id, string.as_ptr()), 1);
+					strings.borrow_mut().insert(Box::leak(data.as_ref().to_string().into_boxed_str()), id);
+					Value::new(
+						raw_types::values::ValueTag::String,
+						raw_types::values::ValueData { string: id },
+					)
+				}
+			}
+		})
 	}
 
 	/// blah blah lifetime is not verified with this so use at your peril
