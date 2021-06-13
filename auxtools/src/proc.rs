@@ -1,5 +1,5 @@
 use crate::*;
-use boomphf::hashmap::NoKeyBoomHashMap;
+use boomphf::{hashmap::NoKeyBoomHashMap, Mphf};
 use std::fmt;
 
 //
@@ -188,14 +188,26 @@ pub fn populate_procs() {
 		i += 1;
 	}
 	unsafe {
-		PROCS_BY_NAME = Some(NoKeyBoomHashMap::new_parallel(
-			procs_by_name.keys().cloned().collect(),
-			procs_by_name.values().cloned().collect(),
-		));
-		PROC_OVERRIDE_IDS = Some(NoKeyBoomHashMap::new_parallel(
-			proc_override_ids.keys().copied().collect(),
-			proc_override_ids.values().copied().collect(),
-		))
+		{
+			let mut pairs = procs_by_name.iter().map(|p| p).collect::<Vec<_>>();
+			let keys = procs_by_name.keys().cloned().collect::<Vec<_>>();
+			let hash = Mphf::new_parallel(1.7, &keys, None);
+			pairs.sort_by_cached_key(|k| hash.hash(k.0));
+			PROCS_BY_NAME = Some(NoKeyBoomHashMap::new_with_mphf(
+				hash,
+				pairs.iter().map(|&(_, v)| v.clone()).collect(),
+			));
+		}
+		{
+			let mut pairs = proc_override_ids.iter().map(|p| p).collect::<Vec<_>>();
+			let keys = proc_override_ids.keys().cloned().collect::<Vec<_>>();
+			let hash = Mphf::new_parallel(1.7, &keys, None);
+			pairs.sort_by_cached_key(|k| hash.hash(k.0));
+			PROC_OVERRIDE_IDS = Some(NoKeyBoomHashMap::new_with_mphf(
+				hash,
+				pairs.iter().map(|(_, &v)| v).collect(),
+			))
+		}
 	}
 }
 
