@@ -180,7 +180,7 @@ pub fn hook(attr: TokenStream, item: TokenStream) -> TokenStream {
 		Some(p) => quote! {
 			auxtools::inventory::submit!(
 				#![crate = auxtools]
-				auxtools::CompileTimeHook::new(#p, #func_name)
+				auxtools::CompileTimeHook::new(#p, auxtools::ProcHook(#func_name))
 			);
 		},
 		None => quote! {},

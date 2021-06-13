@@ -1,7 +1,5 @@
 use crate::*;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use std::cell::RefCell;
+use boomphf::hashmap::NoKeyBoomHashMap;
 use std::fmt;
 
 //
@@ -143,10 +141,10 @@ impl Proc {
 	}
 
 	pub fn override_id(&self) -> u32 {
-		PROC_OVERRIDE_IDS.with(|override_ids| match override_ids.borrow().get(&self.id) {
+		match unsafe { PROC_OVERRIDE_IDS.as_ref().unwrap() }.get(&self.id) {
 			Some(id) => *id,
 			None => 0,
-		})
+		}
 	}
 }
 
@@ -157,8 +155,8 @@ impl fmt::Debug for Proc {
 	}
 }
 
-thread_local!(static PROCS_BY_NAME: RefCell<DashMap<String, Vec<Proc>>> = RefCell::new(DashMap::new()));
-thread_local!(static PROC_OVERRIDE_IDS: RefCell<DashMap<raw_types::procs::ProcId, u32>> = RefCell::new(DashMap::new()));
+static mut PROCS_BY_NAME: Option<NoKeyBoomHashMap<String, Vec<Proc>>> = None;
+static mut PROC_OVERRIDE_IDS: Option<NoKeyBoomHashMap<raw_types::procs::ProcId, u32>> = None;
 
 fn strip_path(p: String) -> String {
 	p.replace("/proc/", "/").replace("/verb/", "/")
@@ -166,6 +164,9 @@ fn strip_path(p: String) -> String {
 
 pub fn populate_procs() {
 	let mut i: u32 = 0;
+	use std::collections::HashMap;
+	let mut proc_override_ids = HashMap::with_capacity(128);
+	let mut procs_by_name = HashMap::with_capacity(128);
 	loop {
 		let proc = Proc::from_id(raw_types::procs::ProcId(i));
 		if proc.is_none() {
@@ -173,39 +174,45 @@ pub fn populate_procs() {
 		}
 		let proc = proc.unwrap();
 
-		PROC_OVERRIDE_IDS.with(|override_ids| {
-			let override_ids = override_ids.borrow_mut();
-
-			PROCS_BY_NAME.with(|h| {
-				match h.borrow_mut().entry(proc.path.clone()) {
-					Entry::Occupied(mut o) => {
-						let vec = o.get_mut();
-						override_ids.insert(proc.id, vec.len() as u32);
-						vec.push(proc);
-					}
-					Entry::Vacant(v) => {
-						override_ids.insert(proc.id, 0);
-						v.insert(vec![proc]);
-					}
-				};
+		procs_by_name
+			.entry(proc.path.clone())
+			.and_modify(|vec: &mut Vec<Proc>| {
+				proc_override_ids.insert(proc.id, vec.len() as u32);
+				vec.push(proc.clone());
+			})
+			.or_insert_with(|| {
+				proc_override_ids.insert(proc.id, 0u32);
+				vec![proc]
 			});
-		});
 
 		i += 1;
+	}
+	unsafe {
+		PROCS_BY_NAME = Some(NoKeyBoomHashMap::new_parallel(
+			procs_by_name.keys().cloned().collect(),
+			procs_by_name.values().cloned().collect(),
+		));
+		PROC_OVERRIDE_IDS = Some(NoKeyBoomHashMap::new_parallel(
+			proc_override_ids.keys().copied().collect(),
+			proc_override_ids.values().copied().collect(),
+		))
 	}
 }
 
 pub fn clear_procs() {
-	PROCS_BY_NAME.with(|h| h.borrow_mut().clear());
-	PROC_OVERRIDE_IDS.with(|override_ids| override_ids.borrow_mut().clear());
+	unsafe { PROCS_BY_NAME = None };
+	unsafe { PROC_OVERRIDE_IDS = None };
 }
 
 pub fn get_proc_override<S: Into<String>>(path: S, override_id: u32) -> Option<Proc> {
 	let s = strip_path(path.into());
-	PROCS_BY_NAME.with(|h| match h.borrow().get(&s)?.get(override_id as usize) {
+	match unsafe { PROCS_BY_NAME.as_ref().unwrap() }
+		.get(&s)?
+		.get(override_id as usize)
+	{
 		Some(p) => Some(p.clone()),
 		None => None,
-	})
+	}
 }
 
 /// Retrieves the 0th override of a proc.

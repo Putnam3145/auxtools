@@ -2,12 +2,11 @@ use super::proc::Proc;
 use super::raw_types;
 use super::value::Value;
 use crate::runtime::DMResult;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
+use boomphf::{hashmap::NoKeyBoomHashMap, Mphf};
 use detour::RawDetour;
 use std::ffi::c_void;
+use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::{cell::RefCell, ffi::CStr};
 
 #[doc(hidden)]
 pub struct CompileTimeHook {
@@ -90,34 +89,71 @@ pub fn init() -> Result<(), String> {
 	Ok(())
 }
 
-pub type ProcHook = fn(&Value, &Value, &mut Vec<Value>) -> DMResult;
+#[derive(Clone, Copy)]
+pub struct ProcHook(pub fn(&Value, &Value, &mut Vec<Value>) -> DMResult);
 
-thread_local! {
-	static PROC_HOOKS: RefCell<DashMap<raw_types::procs::ProcId, ProcHook>> = RefCell::new(DashMap::new());
+use std::fmt;
+
+impl fmt::Debug for ProcHook {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "function pointers with more than one ref argument don't actually work with debug, funny!")
+	}
 }
 
+static mut SHOULD_GENERATE_HOOK_MAP: bool = false;
+
+static mut HOOKED_PROC_IDS: Option<Vec<raw_types::procs::ProcId>> = None;
+
+static mut HOOKED_PROC_VALUES: Option<Vec<ProcHook>> = None;
+
+// only the byond thread touches this so explicit thread local overhead is unnecessary
+static mut PROC_HOOKS: Option<NoKeyBoomHashMap<raw_types::procs::ProcId, ProcHook>> = None;
+
 fn hook_by_id(id: raw_types::procs::ProcId, hook: ProcHook) -> Result<(), HookFailure> {
-	PROC_HOOKS.with(|h| {
-		let map = h.borrow();
-		let entry = map.entry(id);
-		match entry {
-			Entry::Vacant(v) => {
-				v.insert(hook);
-				Ok(())
-			}
-			Entry::Occupied(_) => Err(HookFailure::AlreadyHooked),
+	unsafe {
+		if HOOKED_PROC_IDS.is_none() {
+			HOOKED_PROC_IDS = Some(Vec::new());
 		}
-	})
+		if HOOKED_PROC_VALUES.is_none() {
+			HOOKED_PROC_VALUES = Some(Vec::new());
+		}
+		for &extant_id in HOOKED_PROC_IDS.as_ref().unwrap().iter() {
+			if extant_id == id {
+				return Err(HookFailure::AlreadyHooked);
+			}
+		}
+		HOOKED_PROC_IDS.as_mut().unwrap().push(id);
+		HOOKED_PROC_VALUES.as_mut().unwrap().push(hook);
+		if SHOULD_GENERATE_HOOK_MAP {
+			generate_hook_map();
+		}
+		Ok(())
+	}
 }
 
 pub fn clear_hooks() {
-	PROC_HOOKS.with(|h| h.borrow().clear());
+	unsafe {
+		PROC_HOOKS = None;
+		HOOKED_PROC_IDS = None;
+		HOOKED_PROC_VALUES = None;
+		SHOULD_GENERATE_HOOK_MAP = false;
+	}
 }
 
 pub fn hook<S: Into<String>>(name: S, hook: ProcHook) -> Result<(), HookFailure> {
 	match super::proc::get_proc(name) {
 		Some(p) => hook_by_id(p.id, hook),
 		None => Err(HookFailure::ProcNotFound),
+	}
+}
+
+pub fn generate_hook_map() {
+	unsafe {
+		PROC_HOOKS = Some(NoKeyBoomHashMap::new_with_mphf(
+			Mphf::new(100.0, &HOOKED_PROC_IDS.as_ref().unwrap()),
+			HOOKED_PROC_VALUES.as_ref().unwrap().clone(),
+		));
+		SHOULD_GENERATE_HOOK_MAP = true;
 	}
 }
 
@@ -149,7 +185,7 @@ extern "C" fn call_proc_by_id_hook(
 	_unknown2: u32,
 	_unknown3: u32,
 ) -> u8 {
-	match PROC_HOOKS.with(|h| match h.borrow().get(&proc_id) {
+	match unsafe { PROC_HOOKS.as_ref().unwrap() }.get(&proc_id) {
 		Some(hook) => {
 			let src;
 			let usr;
@@ -166,14 +202,16 @@ extern "C" fn call_proc_by_id_hook(
 					.collect();
 			}
 
-			let result = hook(&src, &usr, &mut args);
+			let result = hook.0(&src, &usr, &mut args);
 
 			match result {
 				Ok(r) => {
 					let result_raw = (&r).raw;
 					// Stealing our reference out of the Value
 					std::mem::forget(r);
-					Some(result_raw)
+					unsafe {
+						*ret = result_raw;
+					}
 				}
 				Err(e) => {
 					// TODO: Some info about the hook would be useful (as the hook is never part of byond's stack, the runtime won't show it.)
@@ -181,15 +219,10 @@ extern "C" fn call_proc_by_id_hook(
 						.unwrap()
 						.call(&[&Value::from_string(e.message.as_str()).unwrap()])
 						.unwrap();
-					Some(Value::null().raw)
+					unsafe {
+						*ret = Value::null().raw;
+					}
 				}
-			}
-		}
-		None => None,
-	}) {
-		Some(result) => {
-			unsafe {
-				*ret = result;
 			}
 			1
 		}
