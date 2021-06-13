@@ -2,7 +2,7 @@ use super::proc::Proc;
 use super::raw_types;
 use super::value::Value;
 use crate::runtime::DMResult;
-use boomphf::{hashmap::NoKeyBoomHashMap, Mphf};
+use boomphf::hashmap::NoKeyBoomHashMap;
 use detour::RawDetour;
 use std::ffi::c_void;
 use std::ffi::CStr;
@@ -149,8 +149,8 @@ pub fn hook<S: Into<String>>(name: S, hook: ProcHook) -> Result<(), HookFailure>
 
 pub fn generate_hook_map() {
 	unsafe {
-		PROC_HOOKS = Some(NoKeyBoomHashMap::new_with_mphf(
-			Mphf::new(100.0, &HOOKED_PROC_IDS.as_ref().unwrap()),
+		PROC_HOOKS = Some(NoKeyBoomHashMap::new_parallel(
+			HOOKED_PROC_IDS.as_ref().unwrap().clone(),
 			HOOKED_PROC_VALUES.as_ref().unwrap().clone(),
 		));
 		SHOULD_GENERATE_HOOK_MAP = true;
