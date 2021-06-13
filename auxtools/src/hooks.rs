@@ -2,7 +2,7 @@ use super::proc::Proc;
 use super::raw_types;
 use super::value::Value;
 use crate::runtime::DMResult;
-use boomphf::hashmap::NoKeyBoomHashMap;
+use boomphf::{Mphf, hashmap::NoKeyBoomHashMap};
 use detour::RawDetour;
 use std::ffi::c_void;
 use std::ffi::CStr;
@@ -102,28 +102,22 @@ impl fmt::Debug for ProcHook {
 
 static mut SHOULD_GENERATE_HOOK_MAP: bool = false;
 
-static mut HOOKED_PROC_IDS: Option<Vec<raw_types::procs::ProcId>> = None;
-
-static mut HOOKED_PROC_VALUES: Option<Vec<ProcHook>> = None;
+static mut HOOKED_PROC_PAIRS: Option<Vec<(raw_types::procs::ProcId,ProcHook)>> = None;
 
 // only the byond thread touches this so explicit thread local overhead is unnecessary
 static mut PROC_HOOKS: Option<NoKeyBoomHashMap<raw_types::procs::ProcId, ProcHook>> = None;
 
 fn hook_by_id(id: raw_types::procs::ProcId, hook: ProcHook) -> Result<(), HookFailure> {
 	unsafe {
-		if HOOKED_PROC_IDS.is_none() {
-			HOOKED_PROC_IDS = Some(Vec::new());
+		if HOOKED_PROC_PAIRS.is_none() {
+			HOOKED_PROC_PAIRS = Some(Vec::new());
 		}
-		if HOOKED_PROC_VALUES.is_none() {
-			HOOKED_PROC_VALUES = Some(Vec::new());
-		}
-		for &extant_id in HOOKED_PROC_IDS.as_ref().unwrap().iter() {
+		for &(extant_id,_) in HOOKED_PROC_PAIRS.as_ref().unwrap().iter() {
 			if extant_id == id {
 				return Err(HookFailure::AlreadyHooked);
 			}
 		}
-		HOOKED_PROC_IDS.as_mut().unwrap().push(id);
-		HOOKED_PROC_VALUES.as_mut().unwrap().push(hook);
+		HOOKED_PROC_PAIRS.as_mut().unwrap().push((id,hook));
 		if SHOULD_GENERATE_HOOK_MAP {
 			generate_hook_map();
 		}
@@ -134,8 +128,7 @@ fn hook_by_id(id: raw_types::procs::ProcId, hook: ProcHook) -> Result<(), HookFa
 pub fn clear_hooks() {
 	unsafe {
 		PROC_HOOKS = None;
-		HOOKED_PROC_IDS = None;
-		HOOKED_PROC_VALUES = None;
+		HOOKED_PROC_PAIRS = None;
 		SHOULD_GENERATE_HOOK_MAP = false;
 	}
 }
@@ -149,9 +142,12 @@ pub fn hook<S: Into<String>>(name: S, hook: ProcHook) -> Result<(), HookFailure>
 
 pub fn generate_hook_map() {
 	unsafe {
-		PROC_HOOKS = Some(NoKeyBoomHashMap::new_parallel(
-			HOOKED_PROC_IDS.as_ref().unwrap().clone(),
-			HOOKED_PROC_VALUES.as_ref().unwrap().clone(),
+		let keys = HOOKED_PROC_PAIRS.as_ref().unwrap().iter().copied().map(|(k,_)| k).collect::<Vec<_>>();
+		let hash = Mphf::new_parallel(100.0, &keys, None);
+		HOOKED_PROC_PAIRS.as_mut().unwrap().sort_by_cached_key(|k| hash.hash(&k.0));
+		PROC_HOOKS = Some(NoKeyBoomHashMap::new_with_mphf(
+			hash,
+			HOOKED_PROC_PAIRS.as_ref().unwrap().iter().copied().map(|(_,v)| v).collect(),
 		));
 		SHOULD_GENERATE_HOOK_MAP = true;
 	}
