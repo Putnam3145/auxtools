@@ -1,9 +1,11 @@
 [workspace]
 members = [
 	"auxtools",
-	"dm",
-	"dm-impl",
-	"sigscan",
+	"auxtools-impl",
+	"debug_server",
+	"tests/auxtest",
+	"tests/byond_get",
+	"tests/test_runner",
 ]
 
 [profile.release]
